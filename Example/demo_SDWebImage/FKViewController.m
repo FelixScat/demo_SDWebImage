@@ -12,6 +12,8 @@
 
 @interface FKViewController ()
 
+@property (nonatomic, strong) UIImageView *imgV;
+
 @end
 
 @implementation FKViewController
@@ -20,16 +22,29 @@
 {
     [super viewDidLoad];
 	
-    UIImageView *imgV = [[UIImageView alloc] initWithFrame:self.view.bounds];
-    [self.view addSubview:imgV];
+    self.imgV = [[UIImageView alloc] initWithFrame:self.view.bounds];
+    [self.view addSubview:self.imgV];
+    [self.imgV setContentMode:UIViewContentModeScaleAspectFit];
+}
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     
-    [imgV sd_setImageWithURL:@""];
+    [self.imgV sd_setImageWithURL:[NSURL URLWithString:@"https://github.com/FelixScat/Pub/blob/master/image/retainCircle.png?raw=true"]];
 }
 
 - (void)didReceiveMemoryWarning
 {
     [super didReceiveMemoryWarning];
     // Dispose of any resources that can be recreated.
+}
+
+#pragma mark - Getter
+
+- (UIImageView *)imgV {
+    if (!_imgV) {
+        _imgV = [[UIImageView alloc] init];
+    }
+    return _imgV;
 }
 
 @end
