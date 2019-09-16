@@ -1,0 +1,25 @@
+PODS:
+  - demo_SDWebImage (0.1.0)
+  - SDWebImage (5.1.1):
+    - SDWebImage/Core (= 5.1.1)
+  - SDWebImage/Core (5.1.1)
+
+DEPENDENCIES:
+  - demo_SDWebImage (from `../`)
+  - SDWebImage (~> 5.0)
+
+SPEC REPOS:
+  https://github.com/cocoapods/specs.git:
+    - SDWebImage
+
+EXTERNAL SOURCES:
+  demo_SDWebImage:
+    :path: "../"
+
+SPEC CHECKSUMS:
+  demo_SDWebImage: 515d004eae645a19fecf7a3925e086968018e156
+  SDWebImage: 96d7f03415ccb28d299d765f93557ff8a617abd8
+
+PODFILE CHECKSUM: abd94593c4d00e4ae4ee69942ba993ec07192a56
+
+COCOAPODS: 1.7.5
