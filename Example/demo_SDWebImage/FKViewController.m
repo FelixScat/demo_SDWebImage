@@ -29,7 +29,10 @@
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     
-    [self.imgV sd_setImageWithURL:[NSURL URLWithString:@"https://github.com/FelixScat/Pub/blob/master/image/retainCircle.png?raw=true"]];
+//    NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:@"https://cn.bing.com/sa/simg/hpc26.png"]];
+//    [self.imgV setImage:[UIImage imageWithData:data]];
+    
+    [self.imgV sd_setImageWithURL:[NSURL URLWithString:@"https://cn.bing.com/sa/simg/hpc26.png"]];
 }
 
 - (void)didReceiveMemoryWarning
