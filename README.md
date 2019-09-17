@@ -483,7 +483,9 @@ SDWebImageManager.m
             }
         }
     }
-
+		
+  	// 如果已经获取到 image 并且没有设置 SDImageCacheQueryMemoryData直接结束当前方法
+  	// 因为只是查询了内存中的内容，并没有用到operation，所以返回的对象为nil
     BOOL shouldQueryMemoryOnly = (image && !(options & SDImageCacheQueryMemoryData));
     if (shouldQueryMemoryOnly) {
         if (doneBlock) {
@@ -492,7 +494,7 @@ SDWebImageManager.m
         return nil;
     }
     
-    // Second check the disk cache...
+    // 第二步，查询磁盘缓存
     NSOperation *operation = [NSOperation new];
     // Check whether we need to synchronously query disk
     // 1. in-memory cache hit & memoryDataSync
@@ -507,7 +509,9 @@ SDWebImageManager.m
             return;
         }
         
+      	// 设计大量内存的使用，创建自动释放池有利于内存平稳释放
         @autoreleasepool {
+          	// 获取磁盘中的 data
             NSData *diskData = [self diskImageDataBySearchingAllPathsForKey:key];
             UIImage *diskImage;
             SDImageCacheType cacheType = SDImageCacheTypeNone;
@@ -517,8 +521,9 @@ SDWebImageManager.m
                 cacheType = SDImageCacheTypeMemory;
             } else if (diskData) {
                 cacheType = SDImageCacheTypeDisk;
-                // decode image data only if in-memory cache missed
+                // 解码
                 diskImage = [self diskImageForKey:key data:diskData options:options context:context];
+              	// 设置中需要在内存中保留一份
                 if (diskImage && self.config.shouldCacheImagesInMemory) {
                     NSUInteger cost = diskImage.sd_memoryCost;
                     [self.memoryCache setObject:diskImage forKey:key cost:cost];
@@ -537,7 +542,7 @@ SDWebImageManager.m
         }
     };
     
-    // Query in ioQueue to keep IO-safe
+    // 使用GCD向队列添加任务，根据设置的sync判断同步或异步
     if (shouldQueryDiskSync) {
         dispatch_sync(self.ioQueue, queryDiskBlock);
     } else {
@@ -548,3 +553,107 @@ SDWebImageManager.m
 }
 ```
 
+SD 的 image 和缓存处理到这里就差不多，下面我们可以看看处理内存释放的地方，内存释放有两种
+
+- 内存释放
+- 磁盘释放
+
+我们可以先看 SDMemoryCache
+
+```objectivec
+- (void)commonInit {
+    SDImageCacheConfig *config = self.config;
+    self.totalCostLimit = config.maxMemoryCost;
+    self.countLimit = config.maxMemoryCount;
+    
+    [config addObserver:self forKeyPath:NSStringFromSelector(@selector(maxMemoryCost)) options:0 context:SDMemoryCacheContext];
+    [config addObserver:self forKeyPath:NSStringFromSelector(@selector(maxMemoryCount)) options:0 context:SDMemoryCacheContext];
+    
+#if SD_UIKIT
+    self.weakCache = [[NSMapTable alloc] initWithKeyOptions:NSPointerFunctionsStrongMemory valueOptions:NSPointerFunctionsWeakMemory capacity:0];
+    self.weakCacheLock = dispatch_semaphore_create(1);
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(didReceiveMemoryWarning:)
+                                                 name:UIApplicationDidReceiveMemoryWarningNotification
+                                               object:nil];
+#endif
+}
+```
+
+由于 SDMemoryCache 是继承 NSCache 这个类的，它也具备在内存紧张的时候自动释放内存，有关于 这部分可以看关于[NSCache](https://k.felixplus.top/nscache/) 这里要注意的是 SDMemoryCache 重写了父类的一些方法，相当于扩展了一下 NSCache，增加了一个 weakCache 对象
+
+```objectivec
+- (void)setObject:(id)obj forKey:(id)key cost:(NSUInteger)g {
+    [super setObject:obj forKey:key cost:g];
+    if (!self.config.shouldUseWeakMemoryCache) {
+        return;
+    }
+    if (key && obj) {
+        // Store weak cache
+        SD_LOCK(self.weakCacheLock);
+        [self.weakCache setObject:obj forKey:key];
+        SD_UNLOCK(self.weakCacheLock);
+    }
+}
+
+- (id)objectForKey:(id)key {
+    id obj = [super objectForKey:key];
+    if (!self.config.shouldUseWeakMemoryCache) {
+        return obj;
+    }
+    if (key && !obj) {
+        // Check weak cache
+        SD_LOCK(self.weakCacheLock);
+        obj = [self.weakCache objectForKey:key];
+        SD_UNLOCK(self.weakCacheLock);
+        if (obj) {
+            // Sync cache
+            NSUInteger cost = 0;
+            if ([obj isKindOfClass:[UIImage class]]) {
+                cost = [(UIImage *)obj sd_memoryCost];
+            }
+            [super setObject:obj forKey:key cost:cost];
+        }
+    }
+    return obj;
+}
+
+- (void)removeObjectForKey:(id)key {
+    [super removeObjectForKey:key];
+    if (!self.config.shouldUseWeakMemoryCache) {
+        return;
+    }
+    if (key) {
+        // Remove weak cache
+        SD_LOCK(self.weakCacheLock);
+        [self.weakCache removeObjectForKey:key];
+        SD_UNLOCK(self.weakCacheLock);
+    }
+}
+```
+
+关于磁盘缓存，可以回看 SDImageCache ，其中 SDImageCache 监听了应用进入后台的通知，在进入后台时会调用这个方法
+
+```objectivec
+- (void)deleteOldFilesWithCompletionBlock:(nullable SDWebImageNoParamsBlock)completionBlock {
+    dispatch_async(self.ioQueue, ^{
+        [self.diskCache removeExpiredData];
+        if (completionBlock) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completionBlock();
+            });
+        }
+    });
+}
+
+#pragma mark - UIApplicationWillTerminateNotification
+
+#if SD_UIKIT || SD_MAC
+- (void)applicationWillTerminate:(NSNotification *)notification {
+    [self deleteOldFilesWithCompletionBlock:nil];
+}
+#endif
+```
+
+至此，SD的整体流程大致就分析完了，希望能对各位理解网络缓存图片的流程理解提供一点帮助
