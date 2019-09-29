@@ -10,9 +10,13 @@
 
 #import <SDWebImage/SDWebImage.h>
 
+#import <CoreFoundation/CoreFoundation.h>
+
 @interface FKViewController ()
 
-@property (nonatomic, strong) UIImageView *imgV;
+@property (nonatomic, strong) NSThread *thread;
+
+@property (nonatomic, strong) NSPort *port;
 
 @end
 
@@ -22,17 +26,28 @@
 {
     [super viewDidLoad];
 	
-    self.imgV = [[UIImageView alloc] initWithFrame:self.view.bounds];
-    [self.view addSubview:self.imgV];
-    [self.imgV setContentMode:UIViewContentModeScaleAspectFit];
+}
+
+- (void)selfThread:(id)obj {
+    
+//    @autoreleasepool {
+    
+        [[NSRunLoop currentRunLoop] run];
+        [[NSRunLoop currentRunLoop] addPort:self.port forMode:NSDefaultRunLoopMode];
+//    }
+}
+
+- (void)someBussiness {
+    
+//    for (int i = 0; i < 10e5 * 2; i++) {
+//        NSString *str = [NSString stringWithFormat:@"%d", i];
+//    }
+//    NSLog(@"finish");
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     
-//    NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:@"https://cn.bing.com/sa/simg/hpc26.png"]];
-//    [self.imgV setImage:[UIImage imageWithData:data]];
-    
-    [self.imgV sd_setImageWithURL:[NSURL URLWithString:@"https://cn.bing.com/sa/simg/hpc26.png"]];
+    [self performSelector:@selector(someBussiness) onThread:self.thread withObject:nil waitUntilDone:false];
 }
 
 - (void)didReceiveMemoryWarning
@@ -41,13 +56,20 @@
     // Dispose of any resources that can be recreated.
 }
 
-#pragma mark - Getter
-
-- (UIImageView *)imgV {
-    if (!_imgV) {
-        _imgV = [[UIImageView alloc] init];
+- (NSThread *)thread {
+    if (!_thread) {
+        _thread = [[NSThread alloc] initWithTarget:self selector:@selector(selfThread:) object:nil];
+        [_thread start];
     }
-    return _imgV;
+    return _thread;
 }
+
+- (NSPort *)port {
+    if (!_port) {
+        _port = [NSPort port];
+    }
+    return _port;
+}
+
 
 @end
